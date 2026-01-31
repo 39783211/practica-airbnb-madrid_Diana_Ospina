@@ -1,0 +1,740 @@
+---
+title: "Práctica Airbnb"
+author: "Diana Ospina"
+format: html
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+1 + 1
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
+
+```{r}
+rm(list = ls())
+
+airbnb <- read.csv(
+  "airbnb-listings (1).csv",
+  sep = ";",
+  stringsAsFactors = FALSE
+)
+
+```
+
+```{r}
+library(dplyr)
+
+```
+
+```{r}
+# Pregunta 1: Selección y filtrado inicial de datos
+
+df_madrid <- airbnb %>%
+  select(
+    City, Room.Type, Neighbourhood, Accommodates, Bathrooms, Bedrooms, Beds,
+    Price, Square.Feet, Guests.Included, Extra.People,
+    Review.Scores.Rating, Latitude, Longitude
+  ) %>%
+  filter(
+    City == "Madrid",
+    Room.Type == "Entire home/apt",
+    Neighbourhood != ""
+  ) %>%
+  select(-City, -Room.Type)
+
+# Verificación
+dim(df_madrid)
+names(df_madrid)
+head(df_madrid)
+
+```
+
+```{r}
+# pregunta 2: Crea una nueva columna llamada Square.Meters a partir de Square.Feet. Recuerda que un pie cuadrado son 0.092903 metros cuadrados.
+
+# Pregunta 2: Crear Square.Meters a partir de Square.Feet
+
+df_madrid <- df_madrid %>%
+  mutate(Square.Meters = Square.Feet * 0.092903)
+
+# Verificación
+summary(df_madrid$Square.Meters)
+head(df_madrid$Square.Meters)
+
+
+```
+
+```         
+```
+
+Tras la conversión de pies cuadrados a metros cuadrados, se observa que la variable presenta numerosos valores faltantes y valores iguales a cero. La distribución muestra una fuerte asimetría positiva, con una media superior a la mediana y presencia de valores extremos elevados.
+
+------------------------------------------------------------------------
+
+```{r}
+# Pregunta 3:¿Que porcentaje de los apartamentos no muestran los metros cuadrados? Es decir, ¿cuantos tienen NA en Square.Meters?
+
+num_na <- sum(is.na(df_madrid$Square.Meters))
+total <- nrow(df_madrid)
+
+porcentaje_na <- (num_na / total) * 100
+
+num_na
+round(porcentaje_na, 2)
+
+# 5254 apartamentos no informan los metros cuadrados (Square.Meters, Eso representa el 93.8% del dataset df_madrid
+
+
+```
+
+```{r}
+# Pregunta 4: Porcentaje de apartamentos con 0 m2 (excluyendo NA)
+
+# Apartamentos con metros informados
+m2_no_na <- df_madrid$Square.Meters[!is.na(df_madrid$Square.Meters)]
+
+# Número de apartamentos con 0 m2
+num_ceros <- sum(m2_no_na == 0)
+
+# Total de apartamentos con metros informados
+total_no_na <- length(m2_no_na)
+
+# Porcentaje
+porcentaje_ceros <- (num_ceros / total_no_na) * 100
+
+num_ceros
+round(porcentaje_ceros, 2)
+
+```
+
+De los apartamentos que informan su tamaño en metros cuadrados, 128 presentan un valor igual a 0 m², lo que representa el 36.89% de este subconjunto. Esto indica la presencia de datos erróneos que deben ser tratados como valores faltantes.
+
+```{r}
+# Pregunta 5: Reemplazar 0 m2 por NA
+
+df_madrid$Square.Meters[df_madrid$Square.Meters == 0] <- NA
+
+# Verificación
+sum(df_madrid$Square.Meters == 0, na.rm = TRUE)
+sum(is.na(df_madrid$Square.Meters))
+
+
+```
+
+Ya no queda ningún 0 metros cuadrados y ahora hay 5382 en NA incluyendo los de ceros que se convirtieron en NA
+
+```{r}
+# Pregunta 6: Histograma de los metros cuadrados
+
+hist(
+  df_madrid$Square.Meters,
+  breaks = 30,
+  main = "Histograma del tamaño de los apartamentos (m²)",
+  xlab = "Metros cuadrados",
+  col = "lightblue",
+  border = "white"
+)
+
+```
+
+Fuerte asimetría positiva osea a la deracha, alta concentración en apartamentos pequeños, cola larga en apartamentos grandes. Se debe revisar la información de los valores muy bajos.
+
+```{r}
+
+# Pregunta 7: Asignar NA a apartamentos con menos de 20 m2
+
+df_madrid$Square.Meters[df_madrid$Square.Meters < 20] <- NA
+
+# Verificación
+sum(df_madrid$Square.Meters < 20, na.rm = TRUE)
+sum(is.na(df_madrid$Square.Meters))
+
+```
+
+Eliminado los valores poco realistas se asigno vlaor de NA a los apartamentos menores de 20 m2
+
+```{r}
+# Pregunta 8: Eliminar barrios con todos los Square.Meters en NA
+
+library(dplyr)
+
+# 1. Identificar barrios con al menos un valor no NA
+barrios_validos <- df_madrid %>%
+  group_by(Neighbourhood) %>%
+  summarise(tiene_m2 = any(!is.na(Square.Meters))) %>%
+  filter(tiene_m2) %>%
+  pull(Neighbourhood)
+
+# 2. Filtrar el dataframe original
+df_madrid <- df_madrid %>%
+  filter(Neighbourhood %in% barrios_validos)
+
+# Verificación
+length(unique(df_madrid$Neighbourhood))
+sum(is.na(df_madrid$Square.Meters))
+
+```
+
+Se eliminan los barrios que no tienen información real del tamaño de los apartamentos
+
+```{r}
+# Pregunta 9: ANOVA para comparar medias de metros cuadrados entre barrios
+
+df_anova <- df_madrid %>%
+  filter(!is.na(Square.Meters))
+
+modelo_anova <- aov(Square.Meters ~ Neighbourhood, data = df_anova)
+
+summary(modelo_anova)
+
+
+```
+
+Se comparan 38 barrios el Pvalor es 0.00000221 osea menor a 0.05 se rechaza la hipotesis nula que todos los barrios tiene la misma media de metros cuadrados
+
+```{r}
+
+# Pregunta 10: Comparaciones múltiples (Tukey) entre barrios
+
+tukey_barrios <- TukeyHSD(modelo_anova, "Neighbourhood")
+
+# Ver resultado completo
+tukey_barrios
+
+# Ver las primeras comparaciones en tabla
+head(tukey_barrios$Neighbourhood)
+
+# (Opcional) Ordenar por p-valor más pequeño (más diferentes)
+tukey_ord <- tukey_barrios$Neighbourhood[order(tukey_barrios$Neighbourhood[, "p adj"]), ]
+head(tukey_ord, 10)
+
+```
+
+Para comparar los barrios entre sí se aplicó el test de Tukey (TukeyHSD), obteniendo comparaciones par a par. Para cada par de barrios se calcula la diferencia de medias (`diff`) y el p-valor ajustado (`p adj`) bajo la hipótesis nula de medias iguales. Un `p adj` bajo (p \< 0.05) indica que ambos barrios difieren significativamente en metros cuadrados promedio, mientras que un `p adj` alto indica que sus medias son similares.
+
+```{r}
+
+# Pregunta 10: Dendrograma usando matriz 1 - p (Tukey)
+
+tukey_mat <- tukey_barrios$Neighbourhood
+
+barrios <- unique(df_anova$Neighbourhood)
+n <- length(barrios)
+
+# Matriz vacía
+mat_dist <- matrix(0, n, n)
+rownames(mat_dist) <- barrios
+colnames(mat_dist) <- barrios
+
+# Llenar matriz con 1 - pvalor
+for (i in 1:nrow(tukey_mat)) {
+  pair <- strsplit(rownames(tukey_mat)[i], "-")[[1]]
+  b1 <- pair[1]
+  b2 <- pair[2]
+  pval <- tukey_mat[i, "p adj"]
+
+  dist <- 1 - pval
+
+  mat_dist[b1, b2] <- dist
+  mat_dist[b2, b1] <- dist
+}
+
+# Clustering jerárquico
+hc <- hclust(as.dist(mat_dist))
+
+# Dendrograma
+plot(hc, main = "Dendrograma de barrios (distancia = 1 - p)")
+
+```
+
+```{r}
+plot(hc, main = "Dendrograma de barrios (distancia = 1 - p)")
+abline(h = 0.7, col = "red", lwd = 2)
+
+
+```
+
+El dendrograma muestra tres agrupaciones naturales de barrios cuando se corta el árbol a una altura aproximada de 0.6. Estos clusters agrupan barrios con tamaños promedio similares de apartamentos. El primer cluster reúne barrios con superficies mayores, el segundo representa valores intermedios y el tercero agrupa barrios con apartamentos más pequeños y homogéneos.
+
+```{r}
+clusters <- cutree(hc, h = 0.7)
+length(unique(clusters))
+
+```
+
+```{r}
+# Pregunta 12: Crear columna neighb_id
+
+df_madrid$neighb_id <- clusters[df_madrid$Neighbourhood]
+
+# Verificación
+head(df_madrid[, c("Neighbourhood", "neighb_id")])
+table(df_madrid$neighb_id)
+
+
+```
+
+Se creó una nueva variable `neighb_id` que asigna a cada apartamento el cluster correspondiente a su barrio, obtenido a partir del dendrograma
+
+```{r}
+# Pregunta 13: División train / test
+
+set.seed(123)  # reproducibilidad
+
+n <- nrow(df_madrid)
+train_idx <- sample(1:n, size = 0.8 * n)
+
+train <- df_madrid[train_idx, ]
+test  <- df_madrid[-train_idx, ]
+
+# Verificación
+nrow(train)
+nrow(test)
+
+```
+
+```{r}
+
+# Pregunta 14: Modelo de regresión
+
+df_madrid$Latitude  <- as.numeric(df_madrid$Latitude)
+df_madrid$Longitude <- as.numeric(df_madrid$Longitude)
+
+
+train_model <- train[!is.na(train$Square.Meters), ]
+
+modelo <- lm(
+  Square.Meters ~ Accommodates + Bathrooms + Bedrooms + Beds +
+  Price + Guests.Included + Extra.People +
+  Review.Scores.Rating + Latitude + Longitude +
+  neighb_id,
+  data = train_model
+)
+
+summary(modelo)
+
+
+```
+
+```{r}
+sum(is.na(df_madrid$Latitude))
+sum(is.na(df_madrid$Longitude))
+
+```
+
+```{r}
+df_madrid$Latitude  <- gsub(",", ".", df_madrid$Latitude)
+df_madrid$Longitude <- gsub(",", ".", df_madrid$Longitude)
+
+df_madrid$Latitude  <- as.numeric(df_madrid$Latitude)
+df_madrid$Longitude <- as.numeric(df_madrid$Longitude)
+
+
+
+```
+
+```{r}
+sum(is.na(df_madrid$Latitude))
+sum(is.na(df_madrid$Longitude))
+
+
+
+```
+
+```{r}
+
+head(df_madrid$Latitude)
+head(df_madrid$Longitude)
+
+```
+
+```{r}
+sum(!is.na(airbnb$Latitude))
+sum(!is.na(airbnb$Longitude))
+
+sum(!is.na(df_madrid$Latitude))
+sum(!is.na(df_madrid$Longitude))
+
+```
+
+```{r}
+names(df_madrid)
+
+```
+
+```{r}
+class(airbnb$Latitude); class(airbnb$Longitude)
+class(df_madrid$Latitude); class(df_madrid$Longitude)
+
+```
+
+```{r}
+library(dplyr)
+
+df_madrid_raw <- airbnb %>%
+  select(
+    City, Room.Type, Neighbourhood, Accommodates, Bathrooms, Bedrooms, Beds,
+    Price, Square.Feet, Guests.Included, Extra.People,
+    Review.Scores.Rating, Latitude, Longitude
+  ) %>%
+  filter(
+    City == "Madrid",
+    Room.Type == "Entire home/apt",
+    Neighbourhood != ""
+  ) %>%
+  select(-City, -Room.Type)
+
+# Ver cómo vienen en texto
+head(df_madrid_raw$Latitude)
+head(df_madrid_raw$Longitude)
+class(df_madrid_raw$Latitude)
+
+```
+
+```{r}
+df_madrid_raw$Latitude  <- trimws(df_madrid_raw$Latitude)
+df_madrid_raw$Longitude <- trimws(df_madrid_raw$Longitude)
+
+df_madrid_raw$Latitude  <- gsub(",", ".", df_madrid_raw$Latitude)
+df_madrid_raw$Longitude <- gsub(",", ".", df_madrid_raw$Longitude)
+
+df_madrid_raw$Latitude  <- as.numeric(df_madrid_raw$Latitude)
+df_madrid_raw$Longitude <- as.numeric(df_madrid_raw$Longitude)
+
+# Verificación
+sum(!is.na(df_madrid_raw$Latitude))
+sum(!is.na(df_madrid_raw$Longitude))
+head(df_madrid_raw$Latitude)
+
+```
+
+```{r}
+unique(df_madrid_raw$Latitude)[1:10]
+
+```
+
+```{r}
+head(airbnb$Latitude, 20)
+table(head(airbnb$Latitude, 50), useNA = "ifany")
+
+```
+
+```{r}
+sum(airbnb$Latitude == "NA", na.rm = TRUE)
+sum(airbnb$Latitude == "", na.rm = TRUE)
+
+```
+
+```{r}
+df_madrid_raw2 <- airbnb %>%
+  select(
+    City, Room.Type, Neighbourhood, Accommodates, Bathrooms, Bedrooms, Beds,
+    Price, Square.Feet, Guests.Included, Extra.People,
+    Review.Scores.Rating, Latitude, Longitude
+  ) %>%
+  filter(
+    City == "Madrid",
+    Room.Type == "Entire home/apt",
+    Neighbourhood != ""
+  ) %>%
+  select(-City, -Room.Type)
+
+head(df_madrid_raw2$Latitude, 20)
+table(head(df_madrid_raw2$Latitude, 50), useNA = "ifany")
+
+```
+
+```{r}
+df_madrid_raw2$Latitude[df_madrid_raw2$Latitude == "NA"] <- NA
+df_madrid_raw2$Longitude[df_madrid_raw2$Longitude == "NA"] <- NA
+
+```
+
+```{r}
+sum(is.na(df_madrid_raw2$Latitude))
+
+```
+
+```{r}
+# Guardar copia por si acaso
+lat_raw <- df_madrid_raw2$Latitude
+lon_raw <- df_madrid_raw2$Longitude
+
+# Quitar TODO excepto dígitos, punto y signo negativo
+lat_clean <- gsub("[^0-9.-]", "", lat_raw)
+lon_clean <- gsub("[^0-9.-]", "", lon_raw)
+
+# Quitar puntos "de miles" dejando solo el PRIMER punto como decimal:
+fix_many_dots <- function(x) {
+  x <- gsub("^\\.+|\\.+$", "", x)         # quitar puntos al inicio/fin
+  parts <- strsplit(x, "\\.", fixed = FALSE)
+  sapply(parts, function(p) {
+    if (length(p) == 1) return(p[1])
+    paste0(p[1], ".", paste(p[-1], collapse = ""))  # deja 1 punto, junta el resto
+  })
+}
+
+lat_fixed <- fix_many_dots(lat_clean)
+lon_fixed <- fix_many_dots(lon_clean)
+
+# Convertir a numeric
+df_madrid_raw2$Latitude  <- as.numeric(lat_fixed)
+df_madrid_raw2$Longitude <- as.numeric(lon_fixed)
+
+# Verificación
+summary(df_madrid_raw2$Latitude)
+summary(df_madrid_raw2$Longitude)
+
+sum(!is.na(df_madrid_raw2$Latitude))
+sum(!is.na(df_madrid_raw2$Longitude))
+
+head(df_madrid_raw2$Latitude, 10)
+head(df_madrid_raw2$Longitude, 10)
+
+```
+
+```{r}
+range(df_madrid_raw2$Latitude, na.rm = TRUE)
+range(df_madrid_raw2$Longitude, na.rm = TRUE)
+
+```
+
+Las variables Latitude y Longitude no fueron utilizadas en el modelo final porque presentaban un formato inconsistente y valores fuera de rango para Madrid, lo que impedía una conversión numérica fiable. En su lugar, se usó la variable `neighb_id` (clusters obtenidos a partir del análisis de barrios), que captura la información espacial necesaria para el modelo.
+
+```{r}
+train_model <- train[!is.na(train$Square.Meters), ]
+
+modelo <- lm(
+  Square.Meters ~ Accommodates + Bathrooms + Bedrooms + Beds +
+    Price + Guests.Included + Extra.People +
+    Review.Scores.Rating + neighb_id,
+  data = train_model
+)
+
+summary(modelo)
+
+```
+
+```{r}
+
+predicciones <- predict(modelo, newdata = test)
+
+```
+
+```{r}
+test_eval <- test[!is.na(test$Square.Meters), ]
+pred_eval <- predicciones[!is.na(test$Square.Meters)]
+
+```
+
+```{r}
+rmse <- sqrt(mean((test_eval$Square.Meters - pred_eval)^2))
+rmse
+
+```
+
+```{r}
+mae <- mean(abs(test_eval$Square.Meters - pred_eval))
+mae
+
+```
+
+```{r}
+
+sum(is.na(predicciones))
+length(predicciones)
+
+```
+
+```{r}
+
+sum(is.na(test$Square.Meters))
+sum(!is.na(test$Square.Meters))
+
+```
+
+```{r}
+
+predicciones <- predict(modelo, newdata = test)
+
+idx <- !is.na(test$Square.Meters) & !is.na(predicciones)
+
+test_eval <- test[idx, ]
+pred_eval <- predicciones[idx]
+
+nrow(test_eval)
+
+```
+
+```{r}
+
+rmse <- sqrt(mean((test_eval$Square.Meters - pred_eval)^2))
+mae  <- mean(abs(test_eval$Square.Meters - pred_eval))
+r2_test <- cor(test_eval$Square.Meters, pred_eval)^2
+
+rmse
+mae
+r2_test
+
+```
+
+El modelo presenta un RMSE de 49.26 m² y un MAE de 23.88 m². El error medio absoluto indica que las predicciones difieren en aproximadamente 24 m² respecto a los valores reales. El coeficiente de determinación R² = 0.91 muestra que el modelo explica el 91% de la variabilidad del tamaño de los apartamentos, lo que indica un modelo con alta capacidad predictiva.
+
+```{r}
+
+df_madrid[df_madrid$Neighbourhood == "Sol", c("Neighbourhood", "neighb_id")] |> head()
+
+```
+
+```{r}
+
+nuevo <- data.frame(
+  Accommodates = 6,
+  Bathrooms = 1,
+  Bedrooms = 3,
+  Beds = 3,
+  Price = 80,
+  Guests.Included = 2,
+  Extra.People = 10,
+  Review.Scores.Rating = 80,
+  neighb_id = 1
+)
+
+```
+
+```{r}
+
+pred1 <- predict(modelo, nuevo)
+pred1
+
+```
+
+84.41 es el tamaño del apartamento estimado
+
+```{r}
+
+nuevo2 <- nuevo
+nuevo2$Bedrooms <- nuevo$Bedrooms + 1
+
+pred2 <- predict(modelo, nuevo2)
+pred2
+
+incremento <- pred2 - pred1
+incremento
+
+```
+
+Si el apartamento pasa de 3 → 4 habitaciones, el tamaño estimado sube a ≈ 116 m², lo que indica que el
+
+número de habitaciones tiene efecto positivo significativo sobre el tamaño del apartamento\
+
+```{r}
+
+na_index <- is.na(df_madrid$Square.Meters)
+
+df_madrid$Square.Meters[na_index] <- predict(modelo, df_madrid[na_index, ])
+
+```
+
+```{r}
+
+na_idx <- is.na(df_madrid$Square.Meters)
+sum(na_idx)          # cuántos NA hay
+nrow(df_madrid)      # total de filas
+round(mean(na_idx)*100, 2)   # % de NA
+
+```
+
+```{r}
+
+df_madrid$Square.Meters[na_idx] <- predict(modelo, newdata = df_madrid[na_idx, ])
+
+```
+
+```{r}
+
+sum(is.na(df_madrid$Square.Meters))   # debería ser 0
+
+summary(df_madrid$Square.Meters)
+head(df_madrid$Square.Meters)
+
+```
+
+```{r}
+colSums(is.na(df_madrid[na_idx, ]))
+
+```
+
+```{r}
+na_rows <- df_madrid[na_idx, ]
+
+filas_validas <- complete.cases(na_rows[, c(
+  "Accommodates","Bathrooms","Bedrooms","Beds","Price",
+  "Guests.Included","Extra.People","Review.Scores.Rating",
+  "Latitude","Longitude","neighb_id"
+)])
+
+```
+
+```{r}
+df_madrid$Square.Meters[na_idx][filas_validas] <-
+  predict(modelo, newdata = na_rows[filas_validas, ])
+
+```
+
+```{r}
+sum(is.na(df_madrid$Square.Meters))
+
+```
+
+```{r}
+sum(filas_validas)
+
+```
+
+```{r}
+df_madrid <- df_madrid[!is.na(df_madrid$Square.Meters), ]
+
+```
+
+Nos quedamos solo con los datos confiables, eliminando esos pisos que no reportan los m2
+
+```{r}
+sum(is.na(df_madrid$Square.Meters))
+nrow(df_madrid)
+summary(df_madrid$Square.Meters)
+
+```
+
+Nos quedamos con 4196 apartamentos válidos
+
+```{r}
+summary(df_madrid$Square.Meters)
+
+```
+
+Tras la limpieza y validación del dataset, se trabajó con 4196 apartamentos completamente informados.
+
+Se comprobó mediante ANOVA que existen diferencias significativas en el tamaño medio de los apartamentos entre barrios.
+
+Se agruparon los barrios usando un enfoque de clustering basado en la distancia 1 − pvalor de Tukey, creando un identificador sintético (`neighb_id`).\
+
+Se entrenó un modelo de regresión lineal para predecir los metros cuadrados, obteniendo un R² en test del 91%, lo que indica un excelente ajuste.
+
+El modelo permite estimar de forma razonable el tamaño de apartamentos y analizar el impacto de variables como el número de habitaciones.
